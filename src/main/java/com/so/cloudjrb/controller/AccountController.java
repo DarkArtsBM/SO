@@ -13,11 +13,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
+import com.so.cloudjrb.config.RabbitMQConfig;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
 import java.util.HashMap; // Importação chave para a correção
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+
 
 /**
  * Controlador para todas as operações relacionadas diretamente à conta,
@@ -33,6 +38,9 @@ public class AccountController {
 
     @Autowired
     private ExtratoPdfService extratoPdfService;
+    // Injeta o template do RabbitMQ
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
 
     /**
      * Busca os detalhes completos de uma conta pelo CPF.
@@ -99,8 +107,17 @@ public class AccountController {
      */
     @PostMapping("/transferir")
     public ResponseEntity<Map<String, String>> transferir(@RequestBody TransferRequest req) {
-        bankService.transferir(req.cpfOrigem(), req.cpfDestino(), req.valor());
-        return ResponseEntity.ok(Map.of("mensagem", "Transferência realizada com sucesso."));
+
+        System.out.println("[CONTROLADOR] Pedido de transferência recebido. A publicar na fila...");
+
+        // Em vez de chamar bankService.transferir(...),
+        // publicamos a mensagem (o objeto DTO) diretamente na fila.
+        rabbitTemplate.convertAndSend(RabbitMQConfig.QUEUE_NAME, req);
+
+        // Retorna uma resposta imediata para o utilizador.
+        // O frontend
+        // irá mostrar esta mensagem.
+        return ResponseEntity.ok(Map.of("mensagem", "Transferência solicitada. O processamento está em curso."));
     }
 
     /**
